@@ -1,6 +1,8 @@
 #define START_BYTE '<'
 #define END_BYTE '>'
 #define MAX_PACKET_LEN 64
+#include <Servo.h>
+
 // -------------------------------
 // Global Variables & Constants
 // -------------------------------
@@ -15,6 +17,13 @@ bool packetInProgress = false;
 uint8_t currentChecksum = 0;
 
 bool lineFollowingMode = false; // Flag for line following mode
+
+//Servo tay gắp
+#define SERVO_PIN 6       // Chân điều khiển servo
+#define GRIPPER_OPEN_ANGLE 70
+#define GRIPPER_CLOSE_ANGLE 120
+Servo gripperServo;       // Đối tượng servo
+bool gripperState = false; // false: đóng, true: mở
 
 // -------------------------------
 // Function Prototypes
@@ -32,6 +41,9 @@ void setMotorSpeeds(int16_t speeds[4]);
 void setup() {
   Serial.begin(115200);
   // Initialize sensors and other devices here
+  //Servo tay gắp
+  gripperServo.attach(SERVO_PIN);
+  gripperServo.write(GRIPPER_CLOSE_ANGLE); // Khởi động ở trạng thái đóng
 }
 
 // -------------------------------
@@ -60,6 +72,24 @@ void loop() {
       sendXYRData(x, y, r); // Transmit computed data to master
     }
   }
+}
+
+// -------------------------------
+// Servo Control Functions 
+// -------------------------------
+void controlGripper(bool open) {
+  if (!gripperServo.attached()) return; // Kiểm tra servo đã kết nối chưa
+  
+  if (open) {
+    gripperServo.write(GRIPPER_OPEN_ANGLE);
+    gripperState = true;
+    Serial.println("<G:1:OK>"); // Gửi trạng thái về Master
+  } else {
+    gripperServo.write(GRIPPER_CLOSE_ANGLE);
+    gripperState = false;
+    Serial.println("<G:0:OK>");
+  }
+  delay(300); // Đợi servo hoàn thành chuyển động
 }
 
 // -------------------------------
@@ -112,6 +142,15 @@ void processPacket(char* data, uint8_t length) {
   // Process commands from master
  
   // Additional commands can be handled here
+  // Xử lý lệnh servo
+  if (strncmp(data, "G:1", 3) == 0) {
+    controlGripper(true);
+    Serial.println("<G:1:OK>"); // Phản hồi
+  } 
+  else if (strncmp(data, "G:0", 3) == 0) {
+    controlGripper(false);
+    Serial.println("<G:0:OK>");
+  }
 }
 
 // -------------------------------
