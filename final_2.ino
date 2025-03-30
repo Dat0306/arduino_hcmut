@@ -70,7 +70,10 @@ const float SPEED_CURVE_GAIN = 1.5;    // Exponential response curve
 // Serial communication parameters
 const char START_BYTE = '<';
 const char END_BYTE = '>';
-const uint16_t SERIAL_TIMEOUT = 500;   // Milliseconds before emergency stop
+const uint16_t SERIAL_TIMEOUT = 500;   // Milliseconds before emergency stop\
+
+//Servo tay gắp
+#define GRIPPER_BUTTON_DEBOUNCE 300 // Thời gian chống nhiễu nút (ms)
 
 // ================================================================
 // GLOBAL VARIABLES
@@ -99,7 +102,7 @@ int16_t currentSpeed[3] = {0};  // Current [X, Y, R] movement after ramping
 uint32_t lastPS2Check = 0;
 uint32_t lastControlUpdate = 0;
 uint32_t lastValidPacket = 0;
-
+uint32_t lastGripperCommand = 0;
 // ================================================================
 // INITIALIZATION & SETUP
 // ================================================================
@@ -288,6 +291,19 @@ void handleSystemModes() {
   if (systemStatus.towActive)     controlTowMechanism();
   if (systemStatus.clampClosed)   controlClamp();
   if (systemStatus.stepperMoving) controlStepper();
+
+  // Servo tay gắp
+   // Thêm điều khiển servo bằng nút L2/R2
+  if (millis() - lastGripperCommand > GRIPPER_BUTTON_DEBOUNCE) {
+    if (ps2Controller.ButtonPressed(PSB_L2)) {
+      sendCommand('G', 1); // Mở gắp
+      lastGripperCommand = millis();
+    }
+    if (ps2Controller.ButtonPressed(PSB_R2)) {
+      sendCommand('G', 0); // Đóng gắp
+      lastGripperCommand = millis();
+    }
+  }
 }
 
 void handleModeSelection() {
@@ -391,6 +407,9 @@ void processSerialCommand(String &cmd) { // Process X:Y:R commands from sensor d
     
     lastValidPacket = millis();  // Reset timeout
   }
+  // Servo tay gắp-Xử lý phản hồi từ Slave
+  if (cmd.startsWith("G:")) {
+    int state = cmd.substring(2, 3).toInt();
 }
 
 void sendCommand(char cmd, int data) {
