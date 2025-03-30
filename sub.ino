@@ -2,6 +2,12 @@
 #define END_BYTE '>'
 #define MAX_PACKET_LEN 64
 #include <Servo.h>
+#include <AccelStepper.h>
+
+// Cấu hình chân stepper
+#define ENABLE_PIN 
+#define DIR_PIN 
+#define STEP_PIN 
 
 // -------------------------------
 // Global Variables & Constants
@@ -18,7 +24,14 @@ uint8_t currentChecksum = 0;
 
 bool lineFollowingMode = false; // Flag for line following mode
 
-//Servo tay gắp
+// Stepper
+const int MICROSTEPS = 4;
+const int STEPS_PER_REV = 200;
+const float MM_PER_REV = 4.0; // Trục vít me 4mm/vòng
+const float STEPS_PER_MM = (STEPS_PER_REV * MICROSTEPS) / MM_PER_REV;
+AccelStepper stepper(AccelStepper::DRIVER, STEP_PIN, DIR_PIN);
+
+// Servo tay gắp
 #define SERVO_PIN 6       // Chân điều khiển servo
 #define GRIPPER_OPEN_ANGLE 70
 #define GRIPPER_CLOSE_ANGLE 120
@@ -41,7 +54,12 @@ void setMotorSpeeds(int16_t speeds[4]);
 void setup() {
   Serial.begin(115200);
   // Initialize sensors and other devices here
-  //Servo tay gắp
+  // Stepper
+  pinMode(ENABLE_PIN, OUTPUT);
+  digitalWrite(ENABLE_PIN, LOW); // Kích hoạt driver
+  stepper.setMaxSpeed(1000);     // steps/s
+  stepper.setAcceleration(500);  // steps/s²
+  // Servo tay gắp
   gripperServo.attach(SERVO_PIN);
   gripperServo.write(GRIPPER_CLOSE_ANGLE); // Khởi động ở trạng thái đóng
 }
@@ -51,6 +69,10 @@ void setup() {
 // -------------------------------
 void loop() {
   handleSerialComm(); // Process incoming serial data
+  // Duy trì chuyển động nếu đang chạy của stepper
+  if (stepper.isRunning()) {
+    stepper.run();
+  }
 
   int x = 0, y = 0, r = 0; // Variables for sensor data
 
@@ -75,8 +97,20 @@ void loop() {
 }
 
 // -------------------------------
-// Servo Control Functions 
+// Control Functions 
 // -------------------------------
+// Stepper
+void controlStepper(int speed) {
+  digitalWrite(ENABLE_PIN, LOW); // Bật driver
+  
+  if (speed == 0) {
+    stepper.stop();
+  } else {
+    stepper.setSpeed(speed);
+    stepper.runSpeed(); // Chạy ở tốc độ cố định
+  }
+}
+// Servo tay gắp
 void controlGripper(bool open) {
   if (!gripperServo.attached()) return; // Kiểm tra servo đã kết nối chưa
   
@@ -142,6 +176,15 @@ void processPacket(char* data, uint8_t length) {
   // Process commands from master
  
   // Additional commands can be handled here
+   // Xử lý lệnh stepper
+  if (strncmp(data, "S:", 2) == 0) {
+    int speed = atoi(data + 2); // Đọc giá trị tốc độ
+    controlStepper(speed);
+  }
+  else if (strncmp(data, "E:", 2) == 0) {
+    stepper.stop(); // Dừng khẩn cấp
+  }
+
   // Xử lý lệnh servo
   if (strncmp(data, "G:1", 3) == 0) {
     controlGripper(true);
@@ -151,6 +194,7 @@ void processPacket(char* data, uint8_t length) {
     controlGripper(false);
     Serial.println("<G:0:OK>");
   }
+
 }
 
 // -------------------------------
