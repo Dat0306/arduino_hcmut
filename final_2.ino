@@ -72,6 +72,10 @@ const char START_BYTE = '<';
 const char END_BYTE = '>';
 const uint16_t SERIAL_TIMEOUT = 500;   // Milliseconds before emergency stop\
 
+//Stepper
+#define STEPPER_SPEED_STEP 50    // Bước thay đổi tốc độ
+#define STEPPER_MAX_SPEED 1000   // Tốc độ tối đa (steps/s)
+
 //Servo tay gắp
 #define GRIPPER_BUTTON_DEBOUNCE 300 // Thời gian chống nhiễu nút (ms)
 
@@ -292,6 +296,10 @@ void handleSystemModes() {
   if (systemStatus.clampClosed)   controlClamp();
   if (systemStatus.stepperMoving) controlStepper();
 
+  // Stepper - Điều khiển khi ở chế độ tương ứng
+  if (systemStatus.stepperMoving) {
+    controlStepper();
+    
   // Servo tay gắp
    // Thêm điều khiển servo bằng nút L2/R2
   if (millis() - lastGripperCommand > GRIPPER_BUTTON_DEBOUNCE) {
@@ -366,8 +374,30 @@ void controlClamp() {
 }
 
 void controlStepper() {
-  if (ps2Controller.ButtonPressed(PSB_L3)) sendCommand('S', 1);
-  if (ps2Controller.ButtonPressed(PSB_R3)) sendCommand('S', 0);
+  static int stepperSpeed = 0;
+  
+  // Tăng/giảm tốc độ bằng L3/R3
+  if (ps2Controller.ButtonPressed(PSB_L3)) {
+    stepperSpeed = constrain(stepperSpeed + STEPPER_SPEED_STEP, 0, STEPPER_MAX_SPEED);
+    sendStepperCommand(stepperSpeed); // Gửi tốc độ dương (tiến)
+  }
+  if (ps2Controller.ButtonPressed(PSB_R3)) {
+    stepperSpeed = constrain(stepperSpeed - STEPPER_SPEED_STEP, -STEPPER_MAX_SPEED, 0);
+    sendStepperCommand(stepperSpeed); // Gửi tốc độ âm (lùi)
+  }
+  
+  // Dừng khẩn cấp bằng SELECT
+  if (ps2Controller.ButtonPressed(PSB_SELECT)) {
+    sendCommand('E', 0); // Lệnh dừng
+    stepperSpeed = 0;
+  }
+}
+
+void sendStepperCommand(int speed) {
+  // Gửi lệnh dạng <S:200:CS> hoặc <S:-200:CS>
+  char buffer[16];
+  snprintf(buffer, sizeof(buffer), "%d", speed);
+  sendCommand('S', buffer);
 }
 
 // ================================================================
